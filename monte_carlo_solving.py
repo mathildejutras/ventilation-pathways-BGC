@@ -420,11 +420,77 @@ for reg in regions:
     plt.close()
 
 
+    # --- get frations by fitting peak
+    bins = np.arange(0,1,0.05)
+    ml = max([len(dOtot[each]) for each in layerdens])
+    for layer in layerdens:
+
+        # to retrieve the surrounding water masses definitions
+        ds = xr.open_dataset(path+'Argo_glodap_final%s_%s_%s.nc'%(addi,reg,layer))
+
+        for i in range(len(idr_all[layer])):
+            dist = (i+1)*5000
+            hist_fi, edgebins, patches = axs[c,i].hist(fini[layer][i], bins=bins, alpha=0.5, label='f$_{ini}$')
+            hist_fa, edgebins, patches = axs[c,i].hist(fabove[layer][i], bins=bins, alpha=0.5, label='f$_{above}$')
+            hist_fb, edgebins, patches = axs[c,i].hist(fbelow[layer][i], bins=bins, alpha=0.5, label='f$_{below}$')
+
+            fini_peak, fini_std = find_peak( hist_fi, edgebins )
+            fini_final[layer].append( fini_peak )
+            fini_final_std[layer].append( fini_std )
+            fabove_peak, fabove_std = find_peak( hist_fa, edgebins )
+            fabove_final[layer].append( fabove_peak )
+            fabove_final_std[layer].append( fabove_std )
+            fbelow_peak, fbelow_std = find_peak( hist_fb, edgebins )
+            fbelow_final[layer].append( fbelow_peak )
+            fbelow_final_std[layer].append( fbelow_std )
+
+    # bgc vs mixing changes
+    flist_bgc = [value for sublist_dict in dObgc.values() for sublist in sublist_dict.values() for value in sublist]
+    fNlist_bgc = [value for sublist_dict in dNbgc.values() for sublist in sublist_dict.values() for value in sublist]
+    flist_mix = [value for sublist_dict in dOmix.values() for sublist in sublist_dict.values() for value in sublist]
+    fNlist_mix = [value for sublist_dict in dNmix.values() for sublist in sublist_dict.values() for value in sublist]
+    bins_bgc = np.linspace(np.percentile(flist_bgc,1), np.percentile(flist_bgc,99), 20)
+    binsN_bgc = np.linspace(np.percentile(fNlist_bgc,1), np.percentile(fNlist_bgc,99), 20)
+    bins_mix = np.linspace(np.percentile(flist_mix,1), np.percentile(flist_mix,99), 20)
+    binsN_mix = np.linspace(np.percentile(fNlist_mix,1), np.percentile(fNlist_mix,99), 20)
+
+    for layer in layerdens:
+        for i in range(len(fini[layer])):
+            if len(dObgc[layer][i]) > 1:
+                histRN, edgebinsN_bgc = np.histogram(dNbgc[layer][i], bins=binsN_bgc)
+                histMN, edgebinsN_mix = np.histogram(dNmix[layer][i], bins=binsN_mix)
+
+                # dObgc = peak of histogram
+                R_peak, R_std = find_peak( histR, edgebins_bgc )
+                RN_peak, RN_std = find_peak( histRN, edgebinsN_bgc )
+                dObgc_final[layer].append( R_peak )
+                dObgc_final_std[layer].append( R_std )
+                dNbgc_final[layer].append( RN_peak )
+                dNbgc_final_std[layer].append( RN_std )
+                # dOmix = peak
+                mix_peak, mix_std = find_peak( histM, edgebins_mix )
+                mixN_peak, mixN_std = find_peak( histMN, edgebinsN_mix )
+                dOmix_final[layer].append( mix_peak )
+                dOmix_final_std[layer].append( mix_std )
+                dNmix_final[layer].append( mixN_peak )
+                dNmix_final_std[layer].append( mixN_std )
+
+            else: # if there was no solution to the mixing equations
+                dObgc_final[layer].append( np.nan )
+                dObgc_final_std[layer].append( np.nan )
+                dOmix_final[layer].append( np.nan )
+                dOmix_final_std[layer].append( np.nan )
+                dNbgc_final[layer].append( np.nan )
+                dNbgc_final_std[layer].append( np.nan )
+                dNmix_final[layer].append( np.nan )
+                dNmix_final_std[layer].append( np.nan )
+
+
     # --------------
     # figure with an example of a solution, to illustrate the method
     if sec == 'Pac':
         layer = 26.9 ; i = 0
-        f, axs = plt.subplots(1,2,figsize=(6,3))
+        f, axs = plt.subplots(1,2,figsize=(6,3), sharey=True)
         bins = np.arange(0,1,0.05)
         axs[0].hist(fini[layer][i], bins=bins, alpha=0.5, label='f$_{0}$')
         axs[0].hist(fabove[layer][i], bins=bins, alpha=0.5, label='f$_{Overlying}$')
@@ -432,13 +498,14 @@ for reg in regions:
         axs[0].set_xlim([0,1])
         axs[0].grid()
         axs[0].legend()
-        axs[0]
         bins = np.linspace(np.percentile(flist_bgc,1), np.percentile(flist_bgc,99), 20)
         axs[1].hist(dObgc[layer][i], bins=bins, alpha=0.5, label='f$_{ini}$', color='k')
         axs[1].grid()
+        axs[1].set_xlim([-10,1])
         axs[0].set_xlabel('Fraction') ; axs[1].set_xlabel('R$_{O_2}$ [$\mu$mol/kg]')
-        axs[0].text(0.05, 0.95, '(a)', fontweight='bold', transform=axs[0].transAxes)
-        axs[1].text(0.05, 0.95, '(a)', fontweight='bold', transform=axs[1].transAxes)
+        axs[0].text(0.02, 0.93, '(a)', fontweight='bold', transform=axs[0].transAxes)
+        axs[1].text(0.02, 0.93, '(b)', fontweight='bold', transform=axs[1].transAxes)
+        axs[0].set_label('Count')
         plt.tight_layout()
         plt.savefig('figures/%s/monte_carlo_example_solution_Pac_26.9.png'%sec, dpi=300)
         plt.close()
